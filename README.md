@@ -1,3 +1,5 @@
+This code is an AI that discerns numbers.
+
 1, do 'cd c://~~~(your file position)'
 2, type 'node sc.js'
 3, press enter
