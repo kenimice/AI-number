@@ -5,3 +5,4 @@
 5, select any button
 
 if you save the json, you can use to substitution the before json to new json.
+※test_clu files are handmade.
