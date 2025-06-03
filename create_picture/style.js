@@ -85,7 +85,7 @@ document.getElementById('easports').addEventListener('touchend', () => {
 });
 
 function digits(number) {
-    return (number + 800).toString().padStart(6, '0');
+    return (number + 0).toString().padStart(6, '0');
 }
 
 function gen(length) {
