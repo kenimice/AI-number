@@ -1,0 +1,35 @@
+body {
+    background-color: #000716;
+}
+
+.grid {
+    display: grid;
+    grid-template-columns: repeat(28, 17px); /* 28列 */
+    grid-template-rows: repeat(28, 17px);    /* 28行 */
+    gap: 1px; /* マス目の隙間 */
+    background-color: white; /* 隙間の色 */
+    width: fit-content;
+    margin-left: calc(50% - 280px);
+}
+
+#easports {
+    color: white;
+    background-color: black;
+}
+
+.cell {
+    width: 20px;
+    height: 20px;
+    background-color: rgba(0,0,0,1);
+    border: 1px solid #333333;
+}
+#enter {
+    margin-left: 45%;
+    margin-bottom: 30px;
+    color: white;
+    background-color: black;
+}
+#num {
+    color: white;
+    font-size: 20px;
+}
