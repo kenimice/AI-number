@@ -1,2 +1,7 @@
-※For reference, I got only 6 AIs over 20% for 5days.
+※参考までに、5日稼働で6体しか20%超えはいませんでした
+※For reference, in 5 days of operation, only 6 of them were over 20%.
 
+ex)
+1st: 12.00%, maxtime: 800t, max: 13.00%
+2nd: 12.00%, maxtime: 1600t, max: 13.01%
+3rd: 12.00%, maxtime: 2400t, max: 13.02%
