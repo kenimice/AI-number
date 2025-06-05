@@ -10,13 +10,14 @@
 ※test_cluファイルはすべてお手製です
 ※使うときはlearnをオフにするのがおすすめです
 
-This code is an AI that discerns numbers.
+This code is an AI that determines the number
 
-1, do 'cd c://~~~(your file position)'
-2, type 'node sc.js'
+1, "cd c://~~~(insert file path)"
+2, enter "node sc.js"
 3, press enter
-4, press help
-5, select any button
+4, Run "help"
+5, enter button
 
-if you save the json, you can use to substitution the before json to new json.
-※test_clu files are handmade.
+The saved json file can be used by replacing the previous json file.
+※All test_clu files are handmade.
+※It is recommended to turn off “learn” when you use it.
