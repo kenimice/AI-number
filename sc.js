@@ -2,20 +2,33 @@ console.log("import完了");
 const fs = require("fs");
 const path = require("path");
 const readlineSync = require("readline-sync");
-const Jimp = require("jimp").default;
+const Jimp = require("jimp");
 
-let weight1 = JSON.parse(fs.readFileSync("weight1.json", "utf8"));
-let weight2 = JSON.parse(fs.readFileSync("weight2.json", "utf8"));
+let files = ["weight1", "weight2", "biases1", "biases2"];
+let hidelayer = 128;
+let autotimes = 3; //auto base now 800 * 3
+let weight1 = 0;
+let weight2 = 0;
+let biases1 = 0;
+let biases2 = 0;
+
+if (fs.readFileSync("weight1.json", "utf8") == 0) resetnum(1);
+if (fs.readFileSync("weight2.json", "utf8") == 0) resetnum(2);
+if (fs.readFileSync("biases1.json", "utf8") == 0) resetnum(3);
+if (fs.readFileSync("biases2.json", "utf8") == 0) resetnum(4);
+
+weight1 = JSON.parse(fs.readFileSync("weight1.json", "utf8"));
+weight2 = JSON.parse(fs.readFileSync("weight2.json", "utf8"));
 console.log('weight同期完了');
-let biases1 = JSON.parse(fs.readFileSync("biases1.json", "utf8"));
-let biases2 = JSON.parse(fs.readFileSync("biases2.json", "utf8"));
+biases1 = JSON.parse(fs.readFileSync("biases1.json", "utf8"));
+biases2 = JSON.parse(fs.readFileSync("biases2.json", "utf8"));
 console.log('biases同期完了');
 let correct = 0;
 let times = 0;
 
 const arg = process.argv[2];
 if (arg === "reset") {
-  resetnum();
+  resetnum(0);
 }
 if (arg === "douki") {
   douki();
@@ -54,24 +67,39 @@ function heInit(inputSize, outputSize) {
   return weights;
 }
 
-function resetnum() {
+function resetnum(input) {
 
-weight1 = heInit(784, 16);
-weight2 = heInit(16, 10);
-
-biases1 = Array.from({ length: 784 }, () => 0);
-biases2 = Array.from({ length: 16 }, () => 0);
-saveWeights("weight1.json", weight1);
-saveWeights("weight2.json", weight2);
-saveWeights("biases1.json", biases1);
-saveWeights("biases2.json", biases2);
-correct = 0;
-times = 0;
-ansmax1 = 0;
-ansmax2 = 0;
-
-console.log('新装開店！');
+if (input === 0 || input === 1) {
+  weight1 = heInit(784, hidelayer);
+  saveWeights("weight1.json", weight1);
 }
+
+if (input === 0 || input === 2) {
+  weight2 = heInit(hidelayer, 10);
+  saveWeights("weight2.json", weight2);
+}
+
+if (input === 0 || input === 3) {
+  biases1 = Array.from({ length: 784 }, () => 0);
+  saveWeights("biases1.json", biases1);
+}
+
+if (input === 0 || input === 4) {
+  biases2 = Array.from({ length: hidelayer }, () => 0);
+  saveWeights("biases2.json", biases2);
+}
+
+if (input === 0) {
+  correct = 0;
+  times = 0;
+  ansmax1 = 0;
+  ansmax2 = 0;
+  badcount = 0;
+}
+
+console.log('新装開店！   ' + input);
+}
+
 let baitch = 0;
 let n = 0.01;
 let bn = 0.01;
@@ -79,7 +107,6 @@ let bn = 0.01;
 async function processImage(filePath) {
   const img = await Jimp.read(filePath);
   img.resize(28, 28).grayscale(); // 28x28 にリサイズし、グレースケール化
-
   let inputArray = Array.from({ length: 28 }, () => Array(28).fill(0));
   for (let y = 0; y < 28; y++) {
     for (let x = 0; x < 28; x++) {
@@ -96,8 +123,8 @@ function flatten(input2D) {
 
 function forward(input) {
   const flatInput = flatten(input);
-  let hidden = Array(16).fill(0);
-  for (let i = 0; i < 16; i++) {
+  let hidden = Array(hidelayer).fill(0);
+  for (let i = 0; i < hidelayer; i++) {
     for (let j = 0; j < 784; j++) {
       hidden[i] += (flatInput[j] * weight1[i][j]) / 784;
     }
@@ -114,8 +141,8 @@ function forward(input) {
 
   let output = Array(10).fill(0);
   for (let i = 0; i < 10; i++) {
-    for (let j = 0; j < 16; j++) {
-      output[i] += (hidden[j] * weight2[i][j]) / 16;
+    for (let j = 0; j < hidelayer; j++) {
+      output[i] += (hidden[j] * weight2[i][j]) / hidelayer;
     }
   }
 
@@ -130,13 +157,13 @@ let sa2 = [];
 function backpropagate(flatInput, hidden, output, label) {
   let cost = Array(10).fill(0);
   cost = output.map((o, i) => o - (i === label ? 1 : 0));
-  sa1 = Array.from({ length: 10 }, () => Array(16).fill(0));
-  sa2 = Array(16).fill(0);
+  sa1 = Array.from({ length: 10 }, () => Array(hidelayer).fill(0));
+  sa2 = Array(hidelayer).fill(0);
   sa1 = sa1.map(row => row.map(v => parseFloat(v)));
   sa2 = sa2.map(v => parseFloat(v));
 
 
-  for (let i = 0; i < 16; i++) {
+  for (let i = 0; i < hidelayer; i++) {
     for (let j = 0; j < 10; j++) {
       sa1[j][i] = (cost[j] * weight2[j][i]) / 10;
       sa2[i] += (cost[j] * weight2[j][i]) / 10;
@@ -156,7 +183,7 @@ function backpropagate(flatInput, hidden, output, label) {
 }
 
   function kaisei(flatInput){
-  for (let i = 0; i < 16; i++) {
+  for (let i = 0; i < hidelayer; i++) {
     for (let j = 0; j < 10; j++) {
       weight2[j][i] -= sa1[j][i] * n;
     }
@@ -166,15 +193,15 @@ function backpropagate(flatInput, hidden, output, label) {
   weight2 = weight2.map((row) => row.map((v) => Math.max(-1, Math.min(v, 1))));
   biases2 = biases2.map((v) => Math.max(-1, Math.min(v ?? 0, 1)));
 
-  for (let i = 0; i < 16; i++) {
+  for (let i = 0; i < hidelayer; i++) {
     for (let j = 0; j < 784; j++) {
       weight1[i][j] -= sa2[i] * flatInput[j] * 10 * n;
     }
   }
 
   for (let j = 0; j < 784; j++) {
-    for (let i = 0; i < 16; i++) {
-      biases1[j] -= ((sa2[i] * weight1[i][j]) / 16) * bn;
+    for (let i = 0; i < hidelayer; i++) {
+      biases1[j] -= ((sa2[i] * weight1[i][j]) / hidelayer) * bn;
     }
   }
 
@@ -201,8 +228,10 @@ function douki() {
 }
 
 let ans1 = 0;
+let ans2 = 0;
 let ansmax1 = 0;
 let ansmax2 = 0;
+let badcount = 0; 
 async function runTrainingLoop(imageFolderPath, auto) {
   const files = fs
     .readdirSync(imageFolderPath)
@@ -226,9 +255,15 @@ async function runTrainingLoop(imageFolderPath, auto) {
       ansmax1 = parseFloat(((correct / times) * 100).toFixed(2));
       ansmax2 = times;
     }
+    ans2 = ans1;
     ans1 = ((correct / times) * 100).toFixed(2);
     if (!auto || !quiet) {
-    console.log(`善 ${file} → 予測: ${predicted}, 正解: ${label}, 正答率: ${ans1}%, 試行回数： ${times}`);
+      if (ans1 < ans2) {
+        console.log(`善 ${file} → 予測: ${predicted}, 正解: ${label}, 正答率: ${ans1}%, 試行回数： ${times} bad`);
+        badcount++;
+      }else {
+        console.log(`善 ${file} → 予測: ${predicted}, 正解: ${label}, 正答率: ${ans1}%, 試行回数： ${times}`);
+      }
     quiet = false;
     }
     if (times % 10000 === 0) {
@@ -252,13 +287,9 @@ function saveNetworkToFolder() {
     console.log(`📁 フォルダ作成: ${folderName}`);
   }
   
-  let variables = {
-    weight1,
-    weight2,
-    biases1,
-    biases2
-  };
-  for (const [name, value] of Object.entries(variables)) {
+  let hennsuus = {weight1, weight2, biases1, biases2};
+
+  for (const [name, value] of Object.entries(hennsuus)) {
     const filePath = path.join(dirPath, `${name}.json`);
     const content = `${name}\n${JSON.stringify(value)}`;
     fs.writeFileSync(filePath, content, "utf-8");
@@ -270,13 +301,13 @@ function saveNetworkToFolder() {
 function outlog(count) {
     const logfile = path.join(__dirname, 'log.txt');
     if (count === 1) {
-      fs.appendFileSync(logfile, `${count}st: ${((correct / times) * 100).toFixed(2)}%, maxtime: ${ansmax2}t, max: ${ansmax1}%\n`, 'utf-8');
+      fs.appendFileSync(logfile, `\n${count}st: ${((correct / times) * 100).toFixed(2)}%, maxtime: ${ansmax2}t, max: ${ansmax1}% badcount: ${badcount}\n`, 'utf-8');
     }else if (count === 2) {
-      fs.appendFileSync(logfile, `${count}nd: ${((correct / times) * 100).toFixed(2)}%, maxtime: ${ansmax2}t, max: ${ansmax1}%\n`, 'utf-8');
+      fs.appendFileSync(logfile, `${count}nd: ${((correct / times) * 100).toFixed(2)}%, maxtime: ${ansmax2}t, max: ${ansmax1}% badcount: ${badcount}\n`, 'utf-8');
     }else if (count === 3) {
-      fs.appendFileSync(logfile, `${count}rd: ${((correct / times) * 100).toFixed(2)}%, maxtime: ${ansmax2}t, max: ${ansmax1}%\n`, 'utf-8');
+      fs.appendFileSync(logfile, `${count}rd: ${((correct / times) * 100).toFixed(2)}%, maxtime: ${ansmax2}t, max: ${ansmax1}% badcount: ${badcount}\n`, 'utf-8');
     }else {
-      fs.appendFileSync(logfile, `${count}th: ${((correct / times) * 100).toFixed(2)}%, maxtime: ${ansmax2}t, max: ${ansmax1}%\n`, 'utf-8');
+      fs.appendFileSync(logfile, `${count}th: ${((correct / times) * 100).toFixed(2)}%, maxtime: ${ansmax2}t, max: ${ansmax1}% badcount: ${badcount}\n`, 'utf-8');
     }
 }
 
@@ -293,20 +324,20 @@ async function foldera(on) {
   const testCluFiles = files.filter((file) => file.startsWith("test_clu"));
   douki();
   for (let file of testCluFiles) {
-    file = 'C:\\Users\\student\\Documents\\PlatformIO\\Projects\\test\\jjs\\' + file;
+    file = __dirname + "/" + file;
     await runTrainingLoop(file, auto);
   }
   if (on && ((correct / times) * 100).toFixed(2) < 12.00) {
     console.log(((correct / times) * 100).toFixed(2) + '%');
-    resetnum();
+    resetnum(0);
     setTimeout(() => {
       foldera(1);
     }, 500);
   }else {
     if (on) console.log(((correct / times) * 100).toFixed(2) + '%');
-    console.log(`max: ${ansmax1}%, times: ${ansmax2}`);
+    console.log(`max: ${ansmax1}%, times: ${ansmax2} badcount: ${badcount}`);
     outlog(autocount);
-    if (autocount < 3) {
+    if (autocount < autotimes) {
       quiet = true;
       autocount++;
       douki();
@@ -324,7 +355,7 @@ async function start() {
   if (folder === "c") {
     folder = readlineSync.question("ほんとに？y/n: ");
     if (folder === "y") {
-      resetnum();
+      resetnum(0);
     }
     start();
   } else if (folder === "i") {
@@ -346,7 +377,7 @@ async function start() {
       const files = fs.readdirSync(currentDir);
       const testCluFiles = files.filter((file) => file.startsWith("test_clu"));
       for (let file of testCluFiles) {
-        file = 'C:\\Users\\student\\Documents\\PlatformIO\\Projects\\test\\jjs\\' + file;
+        file = __dirname + "/" + file;
         await runTrainingLoop(file);
       }
     }
@@ -364,7 +395,7 @@ async function start() {
     saveNetworkToFolder();
     start();
   }else if (folder === 'u') {
-    resetnum();
+    resetnum(0);
     foldera(1);
   }else if (folder === 'l'){
     console.log(`now: ${learn}`);
