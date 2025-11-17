@@ -3,8 +3,8 @@ const fs = require("fs");
 const path = require("path");
 const readlineSync = require("readline-sync");
 const Jimp = require("jimp");
+const { exec } = require('child_process');
 
-let files = ["weight1", "weight2", "biases1", "biases2"];
 let hidelayer = 128;
 let autotimes = 3; //auto base now 800 * 3
 let weight1 = 0;
@@ -12,10 +12,7 @@ let weight2 = 0;
 let biases1 = 0;
 let biases2 = 0;
 
-if (fs.readFileSync("weight1.json", "utf8") == 0) resetnum(1);
-if (fs.readFileSync("weight2.json", "utf8") == 0) resetnum(2);
-if (fs.readFileSync("biases1.json", "utf8") == 0) resetnum(3);
-if (fs.readFileSync("biases2.json", "utf8") == 0) resetnum(4);
+douki();
 
 weight1 = JSON.parse(fs.readFileSync("weight1.json", "utf8"));
 weight2 = JSON.parse(fs.readFileSync("weight2.json", "utf8"));
@@ -25,14 +22,6 @@ biases2 = JSON.parse(fs.readFileSync("biases2.json", "utf8"));
 console.log('biases同期完了');
 let correct = 0;
 let times = 0;
-
-const arg = process.argv[2];
-if (arg === "reset") {
-  resetnum(0);
-}
-if (arg === "douki") {
-  douki();
-}
 
 function softmax(arr) {
   const maxVal = Math.max(...arr);
@@ -210,21 +199,26 @@ function backpropagate(flatInput, hidden, output, label) {
 }
 
 function douki() {
-  const fff = ["weight1.json", "weight2.json", "biases1.json", "biases2.json"];
+  const fff = ["weight1", "weight2", "biases1", "biases2"];
   let allExist = true;
-  fff.forEach(file => {
-    if (!fs.existsSync(file)) {
+  fff.forEach((value) => {
+    if (!fs.existsSync(`${value}.json`)) {
+      fs.writeFileSync(`${value}.json`, "");
       allExist = false;
     }
   });
+
   if (allExist) {
     weight1 = JSON.parse(fs.readFileSync("weight1.json", "utf8"));
     weight2 = JSON.parse(fs.readFileSync("weight2.json", "utf8"));
     biases1 = JSON.parse(fs.readFileSync("biases1.json", "utf8"));
     biases2 = JSON.parse(fs.readFileSync("biases2.json", "utf8"));
-  }else {
-    console.log('⚠️ 一部ファイルが見つかりません。同期できません。');
   }
+  
+  if (fs.readFileSync("weight1.json", "utf8") == 0) resetnum(1);
+  if (fs.readFileSync("weight2.json", "utf8") == 0) resetnum(2);
+  if (fs.readFileSync("biases1.json", "utf8") == 0) resetnum(3);
+  if (fs.readFileSync("biases2.json", "utf8") == 0) resetnum(4);
 }
 
 let ans1 = 0;
@@ -258,11 +252,13 @@ async function runTrainingLoop(imageFolderPath, auto) {
     ans2 = ans1;
     ans1 = ((correct / times) * 100).toFixed(2);
     if (!auto || !quiet) {
-      if (ans1 < ans2) {
-        console.log(`善 ${file} → 予測: ${predicted}, 正解: ${label}, 正答率: ${ans1}%, 試行回数： ${times} bad`);
+      if (parseFloat(ans1) < parseFloat(ans2)) {
+        if (predicted === label) console.log(`善 ${file} → 予測: ${predicted}, 正解: ${label}, 正答率: ${ans1}%, 試行回数： ${times} bad`);
+        else console.log(`悪 ${file} → 予測: ${predicted}, 正解: ${label}, 正答率: ${ans1}%, 試行回数： ${times} bad`);
         badcount++;
       }else {
-        console.log(`善 ${file} → 予測: ${predicted}, 正解: ${label}, 正答率: ${ans1}%, 試行回数： ${times}`);
+        if (predicted === label) console.log(`善 ${file} → 予測: ${predicted}, 正解: ${label}, 正答率: ${ans1}%, 試行回数： ${times}`);
+        else console.log(`悪 ${file} → 予測: ${predicted}, 正解: ${label}, 正答率: ${ans1}%, 試行回数： ${times}`);
       }
     quiet = false;
     }
@@ -345,6 +341,13 @@ async function foldera(on) {
       console.log('start again');
     }else{
       autocount = 1;
+      exec('.bat', (err, stdout, stderr) => {
+        if (err) {
+          console.error(err);
+          return;
+        }
+        console.log(stdout);
+      });
       start().catch(err => console.error(err));
     }
   }
