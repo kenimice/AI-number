@@ -5,12 +5,26 @@ const readlineSync = require("readline-sync");
 const Jimp = require("jimp");
 const { exec } = require('child_process');
 
+let modecons = false;
 let hidelayer = 128;
-let autotimes = 3; //auto base now 800 * 3
-let weight1 = 0;
-let weight2 = 0;
-let biases1 = 0;
-let biases2 = 0;
+let autotimes = 1; //auto base now 800 * 3
+let weight1 = 0; //in - hide [16[784]]
+let weight2 = 0; //hide - out [10[16]]
+let biases1 = 0; //in
+let biases2 = 0; //hide
+let batch = 32; //batch
+let batcht = 0; //batch_count
+let omomig = 0.01;   //omomi_gakusyuuritu
+let baiasug = 0.01;  //baiasu_gakusyuuritu
+
+// kari hennsuu
+let correct = 0;
+let times = 0;
+let ans1 = 0;
+let ans2 = 0;
+let ansmax1 = 0;
+let ansmax2 = 0;
+let badcount = 0;
 
 douki();
 
@@ -20,10 +34,9 @@ console.log('weight同期完了');
 biases1 = JSON.parse(fs.readFileSync("biases1.json", "utf8"));
 biases2 = JSON.parse(fs.readFileSync("biases2.json", "utf8"));
 console.log('biases同期完了');
-let correct = 0;
-let times = 0;
 
 function softmax(arr) {
+  if (modecons) console.log("softmax");
   const maxVal = Math.max(...arr);
   const expArr = arr.map((x) => Math.exp(x - maxVal));
   const sum = expArr.reduce((a, b) => a + b, 0);
@@ -40,24 +53,26 @@ function findMaxIndex(arr) {
 }
 
 function saveWeights(file, data) {
+  if (modecons) console.log("saveweights   ", file);
   fs.writeFileSync(file, JSON.stringify(data));
 }
 
 function heInit(inputSize, outputSize) {
+  if (modecons) console.log("Heinit");
   const scale = Math.sqrt(2 / inputSize);
-  const weights = [];
+  let returnrow = [];
   for (let i = 0; i < outputSize; i++) {
       const row = [];
       for (let j = 0; j < inputSize; j++) {
           row.push((Math.random() * 2 - 1) * scale);
       }
-      weights.push(row);
+      returnrow.push(row);
   }
-  return weights;
+  returnrow = returnrow.map((row) => row.map((v) => Math.max(-1, Math.min(v ?? 0, 1))));
+  return returnrow;
 }
 
 function resetnum(input) {
-
 if (input === 0 || input === 1) {
   weight1 = heInit(784, hidelayer);
   saveWeights("weight1.json", weight1);
@@ -89,11 +104,9 @@ if (input === 0) {
 console.log('新装開店！   ' + input);
 }
 
-let baitch = 0;
-let n = 0.01;
-let bn = 0.01;
 
 async function processImage(filePath) {
+  if (modecons) console.log("prosessimage");
   const img = await Jimp.read(filePath);
   img.resize(28, 28).grayscale(); // 28x28 にリサイズし、グレースケール化
   let inputArray = Array.from({ length: 28 }, () => Array(28).fill(0));
@@ -111,8 +124,13 @@ function flatten(input2D) {
 }
 
 function forward(input) {
+  if (modecons) console.log("forward");
   const flatInput = flatten(input);
   let hidden = Array(hidelayer).fill(0);
+  for (let i = 0; i < 784; i++) {
+    flatInput[i] += biases1[i];
+  }
+
   for (let i = 0; i < hidelayer; i++) {
     for (let j = 0; j < 784; j++) {
       hidden[i] += (flatInput[j] * weight1[i][j]) / 784;
@@ -134,33 +152,55 @@ function forward(input) {
       output[i] += (hidden[j] * weight2[i][j]) / hidelayer;
     }
   }
-
+  //output is big
+  output = softmax(output);
+  //softmax all 1> >0
   return {
-    output: softmax(output),
+    output,
     hidden,
     flatInput,
   };
 }
-let sa1 = [];
-let sa2 = [];
+let sa1 = []; //hide - out weight2 [10[16]]
+let sa2 = []; //in - hide weight1 [16[784]]
+let sa3 = []; //hide biases2 16
+let sa4 = []; //in biases1 784
 function backpropagate(flatInput, hidden, output, label) {
+  if (modecons) console.log("backpropagate");
   let cost = Array(10).fill(0);
   cost = output.map((o, i) => o - (i === label ? 1 : 0));
   sa1 = Array.from({ length: 10 }, () => Array(hidelayer).fill(0));
-  sa2 = Array(hidelayer).fill(0);
+  sa2 = Array.from({ length: hidelayer }, () => Array(784).fill(0));
+  sa3 = Array(hidelayer).fill(0);
+  sa4 = Array(784).fill(0);
   sa1 = sa1.map(row => row.map(v => parseFloat(v)));
-  sa2 = sa2.map(v => parseFloat(v));
-
-
-  for (let i = 0; i < hidelayer; i++) {
-    for (let j = 0; j < 10; j++) {
-      sa1[j][i] = (cost[j] * weight2[j][i]) / 10;
-      sa2[i] += (cost[j] * weight2[j][i]) / 10;
+  sa2 = sa2.map(row => row.map(v => parseFloat(v)));
+  sa3 = sa3.map(v => parseFloat(v));
+  sa4 = sa4.map(v => parseFloat(v));
+  for (let i = 0; i < 10; i++) {
+    if (i === label) {
+      cost[i] = output[i] ** 2;
+    }else {
+      cost[i] = (output[i] - 1) ** 2;
     }
   }
-  baitch ++;
-  if (baitch >= 10) {
-    baitch = 0;
+  for (let i = 0; i < 10; i++) {
+    for (let j = 0; j < hidelayer; j++) {
+      sa1[i][j] -= (cost[i] * weight2[i][j]);
+      sa3[j] -= (cost[i] * weight2[i][j]) / hidelayer;
+    }
+  }
+  for (let i = 0; i < hidelayer; i++) {
+    for (let j = 0; j < 784; j++) {
+      for (let k = 0; k < 10; k++) {
+        sa2[i][j] -= (sa1[k][i] * weight1[i][j]) / 10;
+        sa4[j] -= (sa3[j] * weight1[i][j]) / hidelayer;
+      }
+    }
+  }
+  batcht ++;
+  if (batcht >= batch) {
+    batcht = 0;
     if (learn) kaisei(flatInput);
   }
   cost.forEach((value, index) => {
@@ -171,27 +211,23 @@ function backpropagate(flatInput, hidden, output, label) {
   });
 }
 
-  function kaisei(flatInput){
+function kaisei(flatInput){
+  if (modecons) console.log("kaisei");
   for (let i = 0; i < hidelayer; i++) {
     for (let j = 0; j < 10; j++) {
-      weight2[j][i] -= sa1[j][i] * n;
+      weight2[j][i] -= sa1[j][i] * omomig;
     }
 
-    biases2[i] -= sa2[i] * bn;
+    biases2[i] -= sa3[i] * baiasug;
   }
   weight2 = weight2.map((row) => row.map((v) => Math.max(-1, Math.min(v, 1))));
   biases2 = biases2.map((v) => Math.max(-1, Math.min(v ?? 0, 1)));
 
   for (let i = 0; i < hidelayer; i++) {
     for (let j = 0; j < 784; j++) {
-      weight1[i][j] -= sa2[i] * flatInput[j] * 10 * n;
+      weight1[i][j] -= sa2[i][j] * omomig;
     }
-  }
-
-  for (let j = 0; j < 784; j++) {
-    for (let i = 0; i < hidelayer; i++) {
-      biases1[j] -= ((sa2[i] * weight1[i][j]) / hidelayer) * bn;
-    }
+    biases1[i] -= sa4[i] * baiasug;
   }
 
   weight1 = weight1.map((row) => row.map((v) => Math.max(-1, Math.min(v, 1))));
@@ -199,6 +235,7 @@ function backpropagate(flatInput, hidden, output, label) {
 }
 
 function douki() {
+  if (modecons) console.log("douki");
   const fff = ["weight1", "weight2", "biases1", "biases2"];
   let allExist = true;
   fff.forEach((value) => {
@@ -221,12 +258,8 @@ function douki() {
   if (fs.readFileSync("biases2.json", "utf8") == 0) resetnum(4);
 }
 
-let ans1 = 0;
-let ans2 = 0;
-let ansmax1 = 0;
-let ansmax2 = 0;
-let badcount = 0; 
 async function runTrainingLoop(imageFolderPath, auto) {
+  if (modecons) console.log("runtrainingroop");
   const files = fs
     .readdirSync(imageFolderPath)
     .filter((f) => f.endsWith(".png"));
@@ -243,7 +276,8 @@ async function runTrainingLoop(imageFolderPath, auto) {
 
     const predicted = findMaxIndex(output);
     if (predicted === label) correct++;
-    backpropagate(flatInput, hidden, output, label);
+    
+    //事後処理
     times ++;
     if (times > 200 && parseFloat(((correct / times) * 100).toFixed(2)) > parseFloat(ansmax1)) {
       ansmax1 = parseFloat(((correct / times) * 100).toFixed(2));
@@ -260,15 +294,20 @@ async function runTrainingLoop(imageFolderPath, auto) {
         if (predicted === label) console.log(`善 ${file} → 予測: ${predicted}, 正解: ${label}, 正答率: ${ans1}%, 試行回数： ${times}`);
         else console.log(`悪 ${file} → 予測: ${predicted}, 正解: ${label}, 正答率: ${ans1}%, 試行回数： ${times}`);
       }
-    quiet = false;
+      quiet = false;
     }
+    const logfile = path.join(__dirname, 'log2.txt');
+    fs.appendFileSync(logfile, ans1 + "\n");
     if (times % 10000 === 0) {
-      bn = Math.max(bn - 0.001, 0);
-      n = Math.max(n - 0.001, 0);
-      console.log(`b, bnを0.001減らしました ${times}回 b= ${n}`);
+      baiasug = baiasug / 2;
+      omomig = omomig / 2;
+      console.log(`b, bnを0.001減らしました ${times}回 b= ${omomig}`);
     }
+    //学習
+    backpropagate(flatInput, hidden, output, label);
   }
-
+  
+  
   saveWeights("weight1.json", weight1);
   saveWeights("weight2.json", weight2);
   saveWeights("biases1.json", biases1);
@@ -287,7 +326,7 @@ function saveNetworkToFolder() {
 
   for (const [name, value] of Object.entries(hennsuus)) {
     const filePath = path.join(dirPath, `${name}.json`);
-    const content = `${name}\n${JSON.stringify(value)}`;
+    const content = `${name}\omomig${JSON.stringify(value)}`;
     fs.writeFileSync(filePath, content, "utf-8");
     console.log(`✅ 保存完了: ${name}.json`);
   }
@@ -297,13 +336,13 @@ function saveNetworkToFolder() {
 function outlog(count) {
     const logfile = path.join(__dirname, 'log.txt');
     if (count === 1) {
-      fs.appendFileSync(logfile, `\n${count}st: ${((correct / times) * 100).toFixed(2)}%, maxtime: ${ansmax2}t, max: ${ansmax1}% badcount: ${badcount}\n`, 'utf-8');
+      fs.appendFileSync(logfile, `\omomig${count}st: ${((correct / times) * 100).toFixed(2)}%, maxtime: ${ansmax2}t, max: ${ansmax1}% badcount: ${badcount}\omomig`, 'utf-8');
     }else if (count === 2) {
-      fs.appendFileSync(logfile, `${count}nd: ${((correct / times) * 100).toFixed(2)}%, maxtime: ${ansmax2}t, max: ${ansmax1}% badcount: ${badcount}\n`, 'utf-8');
+      fs.appendFileSync(logfile, `${count}nd: ${((correct / times) * 100).toFixed(2)}%, maxtime: ${ansmax2}t, max: ${ansmax1}% badcount: ${badcount}\omomig`, 'utf-8');
     }else if (count === 3) {
-      fs.appendFileSync(logfile, `${count}rd: ${((correct / times) * 100).toFixed(2)}%, maxtime: ${ansmax2}t, max: ${ansmax1}% badcount: ${badcount}\n`, 'utf-8');
+      fs.appendFileSync(logfile, `${count}rd: ${((correct / times) * 100).toFixed(2)}%, maxtime: ${ansmax2}t, max: ${ansmax1}% badcount: ${badcount}\omomig`, 'utf-8');
     }else {
-      fs.appendFileSync(logfile, `${count}th: ${((correct / times) * 100).toFixed(2)}%, maxtime: ${ansmax2}t, max: ${ansmax1}% badcount: ${badcount}\n`, 'utf-8');
+      fs.appendFileSync(logfile, `${count}th: ${((correct / times) * 100).toFixed(2)}%, maxtime: ${ansmax2}t, max: ${ansmax1}% badcount: ${badcount}\omomig`, 'utf-8');
     }
 }
 
@@ -312,6 +351,7 @@ let autocount = 1;
 let quiet = false;
 let learn = true;
 async function foldera(on) {
+  if (modecons) console.log("foldera");
   if (on) quiet = true;
   if (on) auto = true;
   else auto = false;
@@ -354,6 +394,7 @@ async function foldera(on) {
 }
 
 async function start() {
+  console.log("start");
   let folder = readlineSync.question("選択してくださいc/i/a/b/s/u/l: ");
   if (folder === "c") {
     folder = readlineSync.question("ほんとに？y/n: ");
@@ -386,13 +427,13 @@ async function start() {
     }
     start().catch(err => console.error(err));
   }else if (folder === "b") {
-    console.log(`今： ${n}, ${bn}`);
+    console.log(`今： ${omomig}, ${baiasug}`);
     folder = readlineSync.question("値: ");
     if (folder !== "") {
-      n = parseFloat(folder);
-      bn = parseFloat(folder);
+      omomig = parseFloat(folder);
+      baiasug = parseFloat(folder);
     }
-    console.log(`バイアス：${n} ${bn}`);
+    console.log(`バイアス：${omomig} ${baiasug}`);
     start();
   }else if (folder === 's') {
     saveNetworkToFolder();
@@ -407,7 +448,7 @@ async function start() {
     console.log(`change: ${learn}`);
     start();
   }else if (folder === 'help') {
-    console.log(`c: clear データ全消し\ni: custom カスタムファイル\na: all file 存在するすべての画像を見る\nb: bias 学習率変更 今:${n}\ns: save データを同じ階層に保存\nu: auto 800時点で11%以上のデータのみ通過\nl: learn 現在のデータを読み込むときに学習するかしないか`);
+    console.log(`c: clear データ全消し\ni: custom カスタムファイル\na: all file 存在するすべての画像を見る\nb: bias 学習率変更 今:${omomig}\ns: save データを同じ階層に保存\nu: auto 800時点で11%以上のデータのみ通過\nl: learn 現在のデータを読み込むときに学習するかしないか`);
   }else {
     console.log('error');
     start();
