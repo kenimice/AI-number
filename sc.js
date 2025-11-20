@@ -12,17 +12,15 @@ let auto = false;
 let autocount = 1;
 let quiet = false;
 let learn = true;
-let hidelayer = 128;
+let hidelayer = 16;
 let autotimes = 1; //auto base now 800 * 3
 let batch = 32; //batch
 let batcht = 0; //batch_count
-let omomig = 0.01;   //omomi_gakusyuuritu
-let baiasug = 0.01;  //baiasu_gakusyuuritu
+let omomig = 0.005;   //omomi_gakusyuuritu
+let baiasug = 0.005;  //baiasu_gakusyuuritu
 let flatInput = 0;
-let input = 0;
 let hidden = 0;
 let output = 0;
-
 
 // kari hennsuu
 let correct = 0;
@@ -57,7 +55,7 @@ function softmax(arr) {
 
 //ReLu関数
 function leakeyrelu(x) {
-  return x > 0 ? x : x * 0.1;
+  return x > 0 ? x : x * 0.01;
 }
 
 //He初期化の値を返す
@@ -72,7 +70,6 @@ function heInit(inputSize, outputSize) {
       }
       returnrow.push(row);
   }
-  returnrow = returnrow.map((row) => row.map((v) => Math.max(-1, Math.min(v ?? 0, 1))));
   return returnrow;
 }
 
@@ -132,10 +129,14 @@ function forward(input) {
 
   for (let i = 0; i < hidelayer; i++) {
     for (let j = 0; j < 784; j++) {
-      hidden[i] += (flatInput[j] * weight1[i][j]) / 784;
+      hidden[i] += (flatInput[j] * weight1[i][j]);
     }
     hidden[i] += biases1[i];
     hidden[i] = leakeyrelu(hidden[i]);
+  }
+  let num = 0;
+  for (let i = 0; i < hidden.length; i++) {
+    num += hidden[i];
   }
 
   hidden.forEach((value, index) => {
@@ -148,7 +149,7 @@ function forward(input) {
   output = Array(10).fill(0);
   for (let i = 0; i < 10; i++) {
     for (let j = 0; j < hidelayer; j++) {
-      output[i] += (hidden[j] * weight2[i][j]) / hidelayer;
+      output[i] += (hidden[j] * weight2[i][j]);
     }
     output[i] += biases2[i];
   }
@@ -167,40 +168,39 @@ function backpropagate(label) {
   sa2 = Array.from({ length: 10 }, () => Array(hidelayer).fill(0));
   sa3 = Array(hidelayer).fill(0);
   sa4 = Array(10).fill(0);
-  delta_hidden = Array(16).fill(0);
-  sa1 = sa1.map(row => row.map(v => parseFloat(v)));
-  sa2 = sa2.map(row => row.map(v => parseFloat(v)));
-  sa3 = sa3.map(v => parseFloat(v));
-  sa4 = sa4.map(v => parseFloat(v));
-  delta_hidden = delta_hidden.map(v => parseFloat(v));
+  delta_hidden = Array(hidelayer).fill(0);
 
   //cost
   for (let i = 0; i < 10; i++) {
     cost[i] = output[i] - (i === label ? 1 : 0);
-    sa4[i] = cost[i];
+    sa4[i] += cost[i];
   }
 
   for (let i = 0; i < 10; i++) {
     for (let j = 0; j < hidelayer; j++) {
-      sa2[i][j] = cost[i] * hidden[j]
+      sa2[i][j] += cost[i] * hidden[j]
     }
   }
 
   //delta_hidden
-  for (let j = 0; j < hidelayer; j++) {
-    for (let i = 0; i < 10; i++) {
-      delta_hidden[j] = cost[i] * weight2[i][j];
+  for (let i = 0; i < hidelayer; i++) {
+    for (let j = 0; j < 10; j++) {
+      delta_hidden[i] += cost[j] * weight2[j][i];
     }
-    if (hidden[j] <= 0) delta_hidden[j] = 0;
+  }
+  
+  for (let j = 0; j < hidelayer; j++) {
+    const reluDeriv = hidden[j] > 0 ? 1 : 0;
+    delta_hidden[j] *= reluDeriv;
   }
 
   for (let i = 0; i < hidelayer; i++) {
-    sa3[i] = delta_hidden[i];
+    sa3[i] += delta_hidden[i];
   }
-
+  
   for (let i = 0; i < hidelayer; i++) {
     for (let j = 0; j < 784; j++) {
-      sa1[i][j] = delta_hidden[i] * flatInput[j]
+      sa1[i][j] += delta_hidden[i] * flatInput[j];
     }
   }
 
@@ -211,6 +211,7 @@ function backpropagate(label) {
       value = 0;
     }
   });
+
 }
 
 //saの適用
@@ -343,12 +344,13 @@ function saveNetworkToFolder() {
     fs.mkdirSync(dirPath);
     console.log(`📁 フォルダ作成: ${folderName}`);
   }
-  
+
+  //35200 50400
   let hennsuus = {weight1, weight2, biases1, biases2};
 
   for (const [name, value] of Object.entries(hennsuus)) {
     const filePath = path.join(dirPath, `${name}.json`);
-    const content = `${name}\omomig${JSON.stringify(value)}`;
+    const content = `${JSON.stringify(value)}`;
     fs.writeFileSync(filePath, content, "utf-8");
     console.log(`✅ 保存完了: ${name}.json`);
   }
@@ -471,6 +473,8 @@ async function start() {
     start();
   }else if (folder === 'help') {
     console.log(`c: clear データ全消し\ni: custom カスタムファイル\na: all file 存在するすべての画像を見る\nb: bias 学習率変更 今:${omomig}\ns: save データを同じ階層に保存\nu: auto 800時点で11%以上のデータのみ通過\nl: learn 現在のデータを読み込むときに学習するかしないか`);
+  }else if (folder === 'console') {
+    console.log(weight1);
   }else {
     console.log('error');
     start();
