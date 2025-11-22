@@ -12,12 +12,12 @@ let auto = false;
 let autocount = 1;
 let quiet = false;
 let learn = true;
-let hidelayer = 16;
+let hidelayer = 32;
 let autotimes = 1; //auto base now 800 * 3
 let batch = 32; //batch
 let batcht = 0; //batch_count
-let omomig = 0.005;   //omomi_gakusyuuritu
-let baiasug = 0.005;  //baiasu_gakusyuuritu
+let omomig = 0.01;   //omomi_gakusyuuritu
+let baiasug = 0.01;  //baiasu_gakusyuuritu
 let flatInput = 0;
 let hidden = 0;
 let output = 0;
@@ -297,6 +297,7 @@ async function runTrainingLoop(imageFolderPath, auto) {
         ansmax1 = parseFloat(((correct / times) * 100).toFixed(2));
         ansmax2 = times;
       }
+
       ans2 = ans1;
       ans1 = ((correct / times) * 100).toFixed(2);
       if (!auto || !quiet) {
@@ -318,6 +319,10 @@ async function runTrainingLoop(imageFolderPath, auto) {
     //log書き出し
     const logfile = path.join(__dirname, 'log2.txt');
     fs.appendFileSync(logfile, ans1 + "\n");
+    if (parseInt(ans1) - ans1 === 0) {
+      const logfile = path.join(__dirname, 'log.txt');
+      fs.appendFileSync(logfile, times + " " + ans1 + "\n");
+    }
 
     //学習
     if (learn) {
@@ -345,7 +350,7 @@ function saveNetworkToFolder() {
     console.log(`📁 フォルダ作成: ${folderName}`);
   }
 
-  //35200 50400
+  //36000
   let hennsuus = {weight1, weight2, biases1, biases2};
 
   for (const [name, value] of Object.entries(hennsuus)) {
@@ -358,17 +363,9 @@ function saveNetworkToFolder() {
 }
 
 //log書き出し
-function outlog(count) {
+function outlog() {
     const logfile = path.join(__dirname, 'log.txt');
-    if (count === 1) {
-      fs.appendFileSync(logfile, `\n${count}st: ${((correct / times) * 100).toFixed(2)}%, maxtime: ${ansmax2}t, max: ${ansmax1}% badcount: ${badcount}\n`, 'utf-8');
-    }else if (count === 2) {
-      fs.appendFileSync(logfile, `${count}nd: ${((correct / times) * 100).toFixed(2)}%, maxtime: ${ansmax2}t, max: ${ansmax1}% badcount: ${badcount}\n`, 'utf-8');
-    }else if (count === 3) {
-      fs.appendFileSync(logfile, `${count}rd: ${((correct / times) * 100).toFixed(2)}%, maxtime: ${ansmax2}t, max: ${ansmax1}% badcount: ${badcount}\n`, 'utf-8');
-    }else {
-      fs.appendFileSync(logfile, `${count}th: ${((correct / times) * 100).toFixed(2)}%, maxtime: ${ansmax2}t, max: ${ansmax1}% badcount: ${badcount}\n`, 'utf-8');
-    }
+    fs.appendFileSync(logfile, ``, 'utf-8');
 }
 
 //AI前の総括
@@ -384,7 +381,7 @@ async function foldera(on) {
     file = __dirname + "/" + file;
     await runTrainingLoop(file, auto);
   }
-  if (on && ((correct / times) * 100).toFixed(2) < 12.00) {
+  if (on && ((correct / times) * 100).toFixed(2) < 15.00) {
     console.log(((correct / times) * 100).toFixed(2) + '%');
     resetnum(0);
     setTimeout(() => {
@@ -393,7 +390,6 @@ async function foldera(on) {
   }else {
     if (on) console.log(((correct / times) * 100).toFixed(2) + '%');
     console.log(`max: ${ansmax1}%, times: ${ansmax2} badcount: ${badcount}`);
-    outlog(autocount);
     if (autocount < autotimes) {
       quiet = true;
       autocount++;

@@ -1,0 +1,1 @@
+1st: 12.88%, maxtime: 513t, max: 13.26% badcount: 693

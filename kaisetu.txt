@@ -1,0 +1,9 @@
+weight1 in-hide [16[784]]
+weight2 hide-out [10[16]]
+biases1 hide 16個
+biases2 out 10個
+
+sa1 in-hide [16[784]]
+sa2 hide-out [10[16]]
+sa3 hide 16
+sa4 out 10
